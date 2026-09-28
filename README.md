@@ -41,7 +41,7 @@ Infra: Docker Compose (Postgres + optional Hindsight), SQLite fallback for zero-
 
 ## Setup
 ```bash
-git clone <repo> && cd dealmind
+git clone https://github.com/bandarulokeshh-coder/dealmind.git && cd dealmind
 cp .env.example .env
 # edit .env — add LLM_API_KEY (Groq) and HINDSIGHT_API_KEY if using cloud
 pip install -r backend/requirements.txt
@@ -96,3 +96,11 @@ cd backend && python test_backend.py
 
 ## Future Scope
 - Real Hindsight cloud + auth, per-deal banks, reflection caching, webhook ingestion
+
+
+## Links
+- GitHub: https://github.com/bandarulokeshh-coder/dealmind
+- Live Demo: (deploy pending — see deployment section)
+- Article: article.md
+- Social: SOCIAL_POST.md
+- Video Script: VIDEO_SCRIPT.md
