@@ -1,0 +1,9 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+* { scrollbar-width: thin; scrollbar-color: #2a2a4a transparent; }
+body { color: #e8e8f0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
+.glass { background: rgba(20,20,35,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.06); }
+.card { background: #12121e; border: 1px solid #23233a; border-radius: 16px; }
+.btn { @apply px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition; }
+.btn-ghost { @apply px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10; }
