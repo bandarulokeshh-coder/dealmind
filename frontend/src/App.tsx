@@ -1,59 +1,87 @@
-import { BrowserRouter, Routes, Route, NavLink, Link } from "react-router-dom"
-import { Brain, LayoutDashboard, Users, FileText, MessageSquare, Settings, Sparkles, FlaskConical } from "lucide-react"
-import Dashboard from "./pages/Dashboard"
-import Customers from "./pages/Customers"
-import Chat from "./pages/Chat"
-import Memory from "./pages/Memory"
-import LearningDemo from "./pages/LearningDemo"
-import Deals from "./pages/Deals"
-import SettingsPage from "./pages/Settings"
+import { BrowserRouter, Routes, Route } from "react-router-dom"
+import { lazy, Suspense, useEffect, useState } from "react"
+import { Menu } from "lucide-react"
+import Sidebar from "./components/layout/Sidebar"
+import { Skeleton } from "./components/ui/Skeleton"
 
-function Nav() {
-  const link = (to: string, label: string, Icon: any) => (
-    <NavLink to={to} className={({isActive})=>`flex items-center gap-2 px-3 py-2 rounded-xl text-sm ${isActive?"bg-violet-600 text-white":"text-zinc-400 hover:text-white hover:bg-white/5"}`}>
-      <Icon size={16}/>{label}
-    </NavLink>
-  )
-  return (
-    <aside className="w-[240px] shrink-0 p-4 flex flex-col gap-4 border-r border-white/5 bg-[#0a0a14]">
-      <Link to="/" className="flex items-center gap-2 px-2 py-2">
-        <div className="w-8 h-8 rounded-xl bg-violet-600 grid place-items-center"><Brain size={16}/></div>
-        <div><div className="font-semibold leading-none">DealMind</div><div className="text-[11px] text-zinc-500">AI Sales Agent</div></div>
-      </Link>
-      <div className="text-[10px] tracking-widest text-zinc-500 px-2">NAVIGATION</div>
-      <nav className="flex flex-col gap-1">
-        {link("/","Dashboard", LayoutDashboard)}
-        {link("/customers","Customers", Users)}
-        {link("/deals","Deals", FileText)}
-        {link("/chat","Conversations", MessageSquare)}
-        {link("/memory","Memory", Brain)}
-        {link("/demo","Learning Demo", FlaskConical)}
-        {link("/settings","Settings", Settings)}
-      </nav>
-      <div className="mt-auto card p-3">
-        <div className="text-xs font-medium flex items-center gap-1"><Sparkles size={12}/> Hindsight</div>
-        <div className="text-[11px] text-zinc-500 mt-1">Retention → Recall → Reasoning → Better Response</div>
-      </div>
-    </aside>
-  )
-}
+// Lazy load pages for better performance
+const Dashboard = lazy(() => import("./pages/Dashboard"))
+const Customers = lazy(() => import("./pages/Customers"))
+const Deals = lazy(() => import("./pages/Deals"))
+const Chat = lazy(() => import("./pages/Chat"))
+const Memory = lazy(() => import("./pages/Memory"))
+const LearningDemo = lazy(() => import("./pages/LearningDemo"))
+const Settings = lazy(() => import("./pages/Settings"))
 
-export default function App(){
+export default function App() {
+  const [navOpen, setNavOpen] = useState(false)
+
+  // While the mobile drawer is open: dismiss it on Escape and stop the page
+  // behind the backdrop from scrolling.
+  useEffect(() => {
+    if (!navOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setNavOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      document.body.style.overflow = previousOverflow
+    }
+  }, [navOpen])
+
   return (
-    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-      <div className="min-h-screen flex bg-[#070711]">
-        <Nav/>
-        <main className="flex-1 min-w-0">
-          <Routes>
-            <Route path="/" element={<Dashboard/>}/>
-            <Route path="/customers" element={<Customers/>}/>
-            <Route path="/deals" element={<Deals/>}/>
-            <Route path="/chat" element={<Chat/>}/>
-            <Route path="/memory" element={<Memory/>}/>
-            <Route path="/demo" element={<LearningDemo/>}/>
-            <Route path="/settings" element={<SettingsPage/>}/>
-          </Routes>
-        </main>
+    <BrowserRouter>
+      {/* `bg-surface`/`text-fg` come from the token layer. The shell previously
+          hard-coded `bg-white text-black` while the document body was painted
+          #070711, so every page inherited a dark scroll area under a light
+          layout. */}
+      <div className="min-h-screen flex bg-surface text-fg font-inter">
+        <Sidebar open={navOpen} onClose={() => setNavOpen(false)} />
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Mobile top bar — the only nav entry point below md */}
+          <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b border-line bg-surface-1/90 px-4 backdrop-blur-xl md:hidden">
+            <button
+              type="button"
+              onClick={() => setNavOpen(true)}
+              aria-label="Open navigation menu"
+              aria-expanded={navOpen}
+              className="-ml-2 rounded-xl p-2 text-fg-subtle transition-colors hover:bg-surface-2 hover:text-fg"
+            >
+              <Menu size={20} />
+            </button>
+            <span className="text-sm font-bold text-fg-strong">DealMind</span>
+          </header>
+
+          <main className="min-w-0 flex-1">
+          <Suspense
+            fallback={
+              <div className="p-8 space-y-6">
+                <Skeleton className="h-8 w-64" />
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-24 w-full" />
+                  ))}
+                </div>
+                <Skeleton className="h-64 w-full" />
+              </div>
+            }
+          >
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/customers" element={<Customers />} />
+              <Route path="/deals" element={<Deals />} />
+              <Route path="/chat" element={<Chat />} />
+              <Route path="/memory" element={<Memory />} />
+              <Route path="/demo" element={<LearningDemo />} />
+              <Route path="/settings" element={<Settings />} />
+            </Routes>
+          </Suspense>
+          </main>
+        </div>
       </div>
     </BrowserRouter>
   )

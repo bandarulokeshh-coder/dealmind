@@ -32,7 +32,7 @@ Agent loop: `user msg → recall query → Hindsight recall → build context �
 - Customer Memory (categorized), Memory Timeline, Hindsight Activity trace
 - Deal Intelligence + “Why this recommendation?” evidence chain
 - Learning Demo: Before vs After split-screen + 5-step Acme simulation
-- Memory controls: View / Forget / Export
+- Memory controls: View / Forget / Export / Edit individual memories
 
 ## Tech Stack
 Frontend: React 18, TypeScript, Vite, Tailwind, Recharts, lucide-react, react-router-dom

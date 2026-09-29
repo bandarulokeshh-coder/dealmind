@@ -1,5 +1,4 @@
 from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Text, Integer
-from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from datetime import datetime, timezone
 from .database import Base
@@ -17,8 +16,8 @@ class Customer(Base):
     phone = Column(String, default="")
     deal_value = Column(Float, default=0)
     deal_stage = Column(String, default="Lead")
-    created_at = Column(DateTime, default=now)
-    updated_at = Column(DateTime, default=now, onupdate=now)
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 
 class Deal(Base):
     __tablename__ = "deals"
@@ -31,8 +30,8 @@ class Deal(Base):
     probability = Column(Integer, default=30)
     expected_close_date = Column(String, default="")
     status = Column(String, default="Active")
-    created_at = Column(DateTime, default=now)
-    updated_at = Column(DateTime, default=now, onupdate=now)
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 
 class Conversation(Base):
     __tablename__ = "conversations"
@@ -41,7 +40,7 @@ class Conversation(Base):
     deal_id = Column(String, ForeignKey("deals.id"), nullable=True)
     role = Column(String, nullable=False)  # user | assistant
     message = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=now)
+    created_at = Column(DateTime(timezone=True), default=now)
 
 class MemoryEvent(Base):
     __tablename__ = "memory_events"
@@ -51,4 +50,4 @@ class MemoryEvent(Base):
     operation = Column(String, nullable=False)  # RETAIN | RECALL | REFLECT
     summary = Column(Text, default="")
     source = Column(String, default="hindsight")
-    created_at = Column(DateTime, default=now)
+    created_at = Column(DateTime(timezone=True), default=now)

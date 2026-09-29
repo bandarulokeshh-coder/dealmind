@@ -1,12 +1,13 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import func, text
 import logging
 from datetime import datetime, timezone
 
 from .config import settings
-from .database import Base, engine, SessionLocal, get_db, get_engine
+from . import database as dbmod
+from .database import get_db
 from .models import Customer, Deal, Conversation, MemoryEvent
 from .schemas import CustomerCreate, DealCreate, ChatRequest
 from .hindsight.service import get_hindsight, bank_id_for
@@ -19,46 +20,21 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="DealMind API", version="0.1.0")
 
 origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins or ["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=bool(origins),
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-# DB init with postgres -> sqlite fallback
-def init_db():
-    global engine
-    try:
-        Base.metadata.create_all(bind=engine)
-        # probe
-        with engine.connect() as c:
-            c.execute(text("SELECT 1"))
-        logger.info(f"DB connected: {settings.database_url[:30]}...")
-    except Exception as e:
-        logger.warning(f"Postgres unavailable ({e}), falling back to SQLite")
-        from .database import get_engine as ge
-        import sqlalchemy
-        fallback = "sqlite:///./dealmind.db"
-        eng2 = ge(fallback)
-        Base.metadata.create_all(bind=eng2)
-        # patch globals
-        import app.database as dbmod
-        import sys
-        # Rebind SessionLocal to fallback
-        from sqlalchemy.orm import sessionmaker
-        new_session = sessionmaker(autocommit=False, autoflush=False, bind=eng2)
-        # monkey patch
-        import backend.app.database  # noqa
-        # update this module's engine/SessionLocal references via globals
-        globals()["engine"] = eng2
-        # also update database module
-        try:
-            import app.database as adb
-            adb.engine = eng2
-            adb.SessionLocal = new_session
-        except: pass
-        # direct patch for get_db closure — easiest: set SessionLocal in this file
-        global SessionLocal
-        SessionLocal = new_session
-        logger.info("Using SQLite fallback")
-
-init_db()
+# DB init: PostgreSQL first, SQLite fallback (logic lives in database.init_db).
+# Runs at import time so engine/SessionLocal are ready before any request lands.
+_db_ok, db_type = dbmod.init_db()
+engine = dbmod.engine  # used by /api/health
+if not _db_ok:
+    raise RuntimeError("Database initialization failed")
+logger.info(f"Database ready: {db_type}")
 
 llm = LLMService(settings.llm_base_url, settings.llm_api_key, settings.llm_model)
 
@@ -69,14 +45,13 @@ def health():
     try:
         with engine.connect() as c:
             c.execute(text("SELECT 1"))
-    except: db_ok=False
+    except Exception:
+        db_ok = False
     return {
-        "status":"ok",
+        "status": "ok",
         "database": "connected" if db_ok else "unavailable",
         "hindsight": "connected" if hs.available else "mock/unavailable",
         "llm": "connected" if llm.client else "mock/unavailable",
-        "hindsight_url": settings.hindsight_api_url,
-        "llm_model": settings.llm_model,
     }
 
 @app.get("/api/dashboard")
@@ -85,8 +60,7 @@ def dashboard(db: Session = Depends(get_db)):
     deals = db.query(Deal).count()
     interactions = db.query(Conversation).count()
     memories = db.query(MemoryEvent).count()
-    # pipeline sum
-    total = sum(d.value for d in db.query(Deal).all())
+    total = db.query(func.coalesce(func.sum(Deal.value), 0)).scalar() or 0
     active_deals = db.query(Deal).filter(Deal.status=="Active").count()
     recent_deals = db.query(Deal).order_by(Deal.created_at.desc()).limit(5).all()
     recent_events = db.query(MemoryEvent).order_by(MemoryEvent.created_at.desc()).limit(8).all()
@@ -195,29 +169,65 @@ def chat(req: ChatRequest, db: Session = Depends(get_db)):
 # Demo
 @app.post("/api/demo/seed")
 def demo_seed(db: Session = Depends(get_db)):
-    # create Acme demo customer + deal + seed hindsight
-    existing = db.query(Customer).filter(Customer.company=="Acme Manufacturing").first()
-    if existing:
-        return {"customer_id": existing.id, "message":"already seeded"}
-    c = Customer(name="Acme Manufacturing", company="Acme Manufacturing", industry="Manufacturing", email="cto@acme.example", deal_value=1000000, deal_stage="Proposal")
-    db.add(c); db.commit(); db.refresh(c)
-    d = Deal(customer_id=c.id, title="Enterprise AI Platform", value=1000000, stage="Proposal", probability=60, status="Active")
-    db.add(d); db.commit(); db.refresh(d)
+    # Seed Acme (on-premise) + Nova (cloud-native) demo customers.
+    # Each gets its own Hindsight bank via bank_id_for(customer.id),
+    # so Acme facts can never leak into Nova answers and vice versa.
+    # Idempotent: existing companies are reused, missing memories re-seeded.
     hs = get_hindsight()
-    bank_id = bank_id_for(c.id)
-    facts = [
-        "Acme Manufacturing has a ₹10 lakh budget.",
-        "Acme requires on-premise deployment because of internal privacy requirements.",
-        "The CTO is the primary technical decision maker and is concerned about data privacy.",
-        "Acme previously rejected a cloud-only deployment.",
-        "The CTO wants a technical demonstration before approval.",
-        "Expected purchase timeline is approximately 30 days.",
-    ]
-    for f in facts:
-        hs.retain(bank_id, f)
-        db.add(MemoryEvent(customer_id=c.id, deal_id=d.id, operation="RETAIN", summary=f))
-    db.commit()
-    return {"customer_id": c.id, "deal_id": d.id, "bank_id": bank_id}
+
+    def seed_one(company: str, fields: dict, deal_fields: dict, facts: list) -> dict:
+        c = db.query(Customer).filter(Customer.company == company).first()
+        if c is None:
+            c = Customer(name=company, company=company, **fields)
+            db.add(c); db.commit(); db.refresh(c)
+        d = db.query(Deal).filter(Deal.customer_id == c.id).first()
+        if d is None:
+            d = Deal(customer_id=c.id, **deal_fields)
+            db.add(d); db.commit(); db.refresh(d)
+        bank_id = bank_id_for(c.id)
+        # re-seed memories only if this bank has none yet (avoids dupes on re-click)
+        existing_events = db.query(MemoryEvent).filter(
+            MemoryEvent.customer_id == c.id, MemoryEvent.operation == "RETAIN"
+        ).count()
+        if existing_events == 0:
+            for f in facts:
+                hs.retain(bank_id, f)
+                db.add(MemoryEvent(customer_id=c.id, deal_id=d.id, operation="RETAIN", summary=f))
+            db.commit()
+        return {"customer_id": c.id, "deal_id": d.id, "bank_id": bank_id}
+
+    acme = seed_one(
+        "Acme Manufacturing",
+        dict(industry="Manufacturing", email="cto@acme.example", deal_value=1000000, deal_stage="Proposal"),
+        dict(title="Enterprise AI Platform", value=1000000, stage="Proposal", probability=60, status="Active"),
+        [
+            "Acme Manufacturing has a ₹10 lakh budget.",
+            "Acme requires on-premise deployment because of internal privacy requirements.",
+            "The CTO is the primary technical decision maker and is concerned about data privacy.",
+            "Acme previously rejected a cloud-only deployment.",
+            "The CTO wants a technical demonstration before approval.",
+            "Expected purchase timeline is approximately 30 days.",
+        ],
+    )
+    nova = seed_one(
+        "Nova Labs",
+        dict(industry="SaaS", email="vp-eng@nova.example", deal_value=2500000, deal_stage="Discovery"),
+        dict(title="Cloud SaaS Platform", value=2500000, stage="Discovery", probability=40, status="Active"),
+        [
+            "Nova Labs has a ₹25 lakh budget for a cloud solution.",
+            "Nova is cloud-native and wants a fully managed SaaS deployment.",
+            "The VP Engineering is the primary decision maker and prioritizes shipping speed.",
+            "Nova previously rejected on-premise deployment as too slow to maintain.",
+            "The VP Engineering wants a 14-day pilot before approval.",
+            "Expected purchase timeline is approximately 14 days.",
+        ],
+    )
+    # keep old shape for backward compat (LearningDemo used customer_id)
+    return {
+        "customer_id": acme["customer_id"], "deal_id": acme["deal_id"], "bank_id": acme["bank_id"],
+        "acme": acme, "nova": nova,
+        "message": "seeded Acme + Nova",
+    }
 
 @app.post("/api/demo/reset")
 def demo_reset(db: Session = Depends(get_db)):
@@ -256,3 +266,32 @@ def export_memory(customer_id: str):
     bank_id = bank_id_for(customer_id)
     mems = hs.recall(bank_id, "all customer facts")
     return {"bank_id": bank_id, "memories": mems}
+
+
+@app.put("/api/memory/events/{event_id}")
+def update_memory_event(event_id: str, payload: dict, db: Session = Depends(get_db)):
+    """Update a specific memory event's summary"""
+    event = db.query(MemoryEvent).filter(MemoryEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(404, "Memory event not found")
+
+    # Only allow updating the summary field for safety
+    if "summary" in payload:
+        event.summary = payload["summary"]
+        db.commit()
+        db.refresh(event)
+
+    return {"id": event.id, "summary": event.summary, "updated": True}
+
+
+@app.delete("/api/memory/events/{event_id}")
+def delete_memory_event(event_id: str, db: Session = Depends(get_db)):
+    """Delete a specific memory event"""
+    event = db.query(MemoryEvent).filter(MemoryEvent.id == event_id).first()
+    if not event:
+        raise HTTPException(404, "Memory event not found")
+
+    db.delete(event)
+    db.commit()
+
+    return {"id": event_id, "deleted": True}

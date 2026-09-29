@@ -1,1 +1,16 @@
-<!doctype html><html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>DealMind — AI Sales Agent</title></head><body class="bg-[#070711]"><div id="root"></div><script type="module" src="/src/main.tsx"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>DealMind — AI Sales Agent</title>
+  </head>
+  <!-- `bg-surface` is the token canvas. Painting the body separately from the
+       React root prevents a coloured flash before hydration and stops the
+       overscroll area from showing the browser default. -->
+  <body class="bg-surface text-fg">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

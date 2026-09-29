@@ -1,9 +1,273 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-* { scrollbar-width: thin; scrollbar-color: #2a2a4a transparent; }
-body { color: #e8e8f0; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-.glass { background: rgba(20,20,35,0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.06); }
-.card { background: #12121e; border: 1px solid #23233a; border-radius: 16px; }
-.btn { @apply px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-medium transition; }
-.btn-ghost { @apply px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white border border-white/10; }
+/* Inter must be imported before the Tailwind entry or the browser drops it. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+@import "tailwindcss";
+
+/* ============================================================
+   Design tokens (Tailwind v4)
+
+   Light theme is the default. `.theme-dark` below redefines the same
+   tokens for users who prefer dark; pages never hard-code colours, so a
+   theme switch is a single class on <html>/<body>.
+   ============================================================ */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-inter: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  /* Monochrome ramp. The whole product is white surfaces + near-black ink;
+     every grey in the UI comes from this one scale so shades can never drift
+     between pages. */
+  --color-ink-50: #fafafa;
+  --color-ink-100: #f5f5f5;
+  --color-ink-200: #e5e5e5;
+  --color-ink-300: #d4d4d4;
+  --color-ink-400: #a3a3a3;
+  --color-ink-500: #737373;
+  --color-ink-600: #525252;
+  --color-ink-700: #404040;
+  --color-ink-800: #262626;
+  --color-ink-900: #171717;
+  --color-ink-950: #0a0a0a;
+
+  /* Surfaces. The canvas is a light grey so pure-white cards read as raised
+     panels instead of dissolving into the background. */
+  --color-surface: #fafafa;    /* page canvas */
+  --color-surface-1: #ffffff;  /* cards, modals, sidebar */
+  --color-surface-2: #f5f5f5;  /* inset wells, hover fills */
+  --color-surface-3: #e5e5e5;  /* rails, dividers */
+
+  /* Hairlines. `line` is the default border, `line-strong` is for emphasis
+     (hover, focus, active). */
+  --color-line: #e5e5e5;
+  --color-line-strong: #d4d4d4;
+
+  /* Text. All four clear WCAG AA on white. Ratios are computed against
+     #ffffff, the surface these tokens are used on. */
+  --color-fg: #18181b;         /* 17.8:1 — body copy */
+  --color-fg-strong: #09090b;  /* 19.9:1 — headings */
+  --color-fg-subtle: #525252;  /*  7.8:1 — secondary copy */
+  --color-fg-muted: #737373;   /*  4.7:1 — captions, timestamps (AA floor) */
+
+  /* Black is the accent. `brand-*` maps onto the ink ramp, so the primary
+     action is a solid near-black button with white type — no hue competing
+     with the status colours below. */
+  --color-brand-300: #a3a3a3;
+  --color-brand-400: #737373;
+  --color-brand-500: #404040;
+  --color-brand-600: #171717;
+  --color-brand-700: #0a0a0a;
+
+  /* Status. Deliberately the only chromatic colours in the product, and
+     reserved for state: connected / warning / failure. */
+  --color-ok-600: #047857;
+  --color-ok-100: #ecfdf5;
+  --color-warn-600: #b45309;
+  --color-warn-100: #fffbeb;
+  --color-danger-600: #b91c1c;
+  --color-danger-100: #fef2f2;
+
+  --radius-card: 1.25rem;
+}
+
+/* Opt-in dark mode — the same monochrome system inverted: near-black
+   surfaces, white ink. Add `theme-dark` to <html> to enable. Because every
+   component reads these token names (never a hard-coded hex), this single
+   block is the entire dark theme. */
+.theme-dark {
+  --color-surface: #0a0a0a;
+  --color-surface-1: #171717;
+  --color-surface-2: #262626;
+  --color-surface-3: #404040;
+
+  --color-line: #262626;
+  --color-line-strong: #404040;
+
+  --color-fg: #e5e5e5;
+  --color-fg-strong: #fafafa;
+  --color-fg-subtle: #a3a3a3;
+  /* #737373 only reaches 4.2:1 on #0a0a0a — under AA. Lifted to #8f8f8f
+     (6.1:1) while staying distinct from fg-subtle. */
+  --color-fg-muted: #8f8f8f;
+
+  --color-ok-600: #34d399;
+  --color-ok-100: rgba(16, 185, 129, 0.12);
+  --color-warn-600: #fbbf24;
+  --color-warn-100: rgba(245, 158, 11, 0.12);
+  --color-danger-600: #f87171;
+  --color-danger-100: rgba(239, 68, 68, 0.12);
+}
+
+/* ============================================================
+   Base
+
+   Everything here lives inside @layer base so Tailwind utilities
+   always win. Left unlayered these rules outrank `@layer utilities`,
+   which is how a global `h1 { text-2xl }` silently overrode the
+   per-page heading sizes in the previous version of this file.
+   ============================================================ */
+@layer base {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-line-strong) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--color-line-strong);
+    border-radius: 4px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--color-fg-muted);
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+    font-family: var(--font-sans);
+    color: var(--color-fg);
+    background: var(--color-surface);
+  }
+
+  h1 {
+    @apply text-2xl font-bold tracking-tight text-fg-strong;
+  }
+
+  h2 {
+    @apply text-xl font-semibold tracking-tight text-fg-strong;
+  }
+
+  h3 {
+    @apply text-lg font-semibold tracking-tight text-fg-strong;
+  }
+
+  /* One visible keyboard-focus treatment for the whole app. Pointer users
+     never trigger it, keyboard users always can. */
+  :focus-visible {
+    outline: 2px solid var(--color-fg-strong);
+    outline-offset: 2px;
+  }
+
+  /* Black-on-white selection matches the accent used everywhere else. */
+  ::selection {
+    background: var(--color-fg-strong);
+    color: var(--color-surface-1);
+  }
+}
+
+/* ============================================================
+   Components
+
+   Layered deliberately: utilities come after components in Tailwind's
+   cascade, so a utility passed via a `className` prop can always
+   override a component default here.
+   ============================================================ */
+@layer components {
+  /* --- Surfaces --- */
+  /* Translucent panel used for the sidebar footer. Driven by tokens so it
+     inverts correctly with `.theme-dark` instead of being hard-coded white. */
+  .glass {
+    background: color-mix(in srgb, var(--color-surface-1) 78%, transparent);
+    border: 1px solid var(--color-line);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: background-color 0.3s, border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .glass:hover {
+    background: var(--color-surface-1);
+    border-color: var(--color-line-strong);
+  }
+
+  .card {
+    background: var(--color-surface-1);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    box-shadow: 0 1px 2px rgba(9, 9, 11, 0.04), 0 8px 24px -14px rgba(9, 9, 11, 0.12);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .card:hover {
+    border-color: var(--color-line-strong);
+    box-shadow: 0 2px 4px rgba(9, 9, 11, 0.05), 0 12px 32px -14px rgba(9, 9, 11, 0.18);
+  }
+
+  /* Tighter radius on small screens. Kept inside the layer so a `rounded-*`
+     utility passed via className can still override it. */
+  @media (max-width: 768px) {
+    .card {
+      border-radius: 1rem;
+    }
+  }
+
+  /* Buttons, inputs, badges and skeletons intentionally live in
+     components/ui (Button.tsx, Input.tsx, Badge.tsx, Skeleton.tsx).
+     The `.btn`, `.btn-ghost`, `.btn-secondary`, `.input`, `.badge*` and
+     `.skeleton` classes they superseded had zero call sites after the
+     component migration, so they were removed in this theme pass. */
+
+  /* --- Status indicators (glow ring replaces the old no-op `shadow` classes) --- */
+  .status-dot {
+    @apply inline-block h-2 w-2 shrink-0 rounded-full;
+  }
+
+  /* The halo uses the status colour at low alpha so the dot still reads on
+     white without needing a darker ring. */
+  .status-dot-connected {
+    background: var(--color-ok-600);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-ok-600) 22%, transparent);
+  }
+
+  .status-dot-disconnected {
+    background: var(--color-warn-600);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warn-600) 22%, transparent);
+  }
+}
+
+/* ============================================================
+   Utilities
+   ============================================================ */
+@layer utilities {
+  .animate-fadeIn {
+    animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Removed in the theme pass (zero call sites):
+   - `.gradient-text` — its fix was never consumed by any component
+   - `.animate-slideIn` / `@keyframes slideIn` — only the toast used them
+   - `.toast*` — no toast exists anywhere in the app
+   Restored only if those features come back. */
+
+/* Honour the OS "reduce motion" setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

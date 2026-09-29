@@ -28,10 +28,39 @@ def is_transient(text: str) -> bool:
     t = text.strip().lower()
     return t in TRANSIENT or len(t) < 8
 
+def _norm(text: str) -> str:
+    # normalize for dedup: lowercase, strip metadata suffixes ("| When: ..."),
+    # collapse whitespace/punctuation so near-identical retains match
+    t = (text or "").lower()
+    t = re.split(r"\s*\|\s*(?:when|involving)\s*:", t)[0]
+    t = re.sub(r"[^a-z0-9₹\s]", " ", t)
+    return re.sub(r"\s+", " ", t).strip()
+
+
 def bank_id_for(customer_id: str) -> str:
     # deterministic per customer
     safe = re.sub(r"[^a-zA-Z0-9_-]", "-", customer_id.lower())[:40]
     return f"dealmind-{safe}"
+
+
+def dedup_memories(items: List[Dict[str, Any]], limit: int = 6) -> List[Dict[str, Any]]:
+    # keep highest-relevance copy of each near-duplicate, preserve order by score
+    seen: Dict[str, Dict[str, Any]] = {}
+    for it in sorted(items, key=lambda x: x.get("relevance", 0), reverse=True):
+        key = _norm(it.get("text", ""))
+        # fuzzy: skip if it shares >80% words with an already-kept item
+        words = set(key.split())
+        dup = False
+        for k in seen:
+            ks = set(k.split())
+            if words and ks and len(words & ks) / max(len(words), len(ks)) > 0.8:
+                dup = True
+                break
+        if not dup and key:
+            seen[key] = it
+        if len(seen) >= limit:
+            break
+    return list(seen.values())
 
 class HindsightService:
     def __init__(self, base_url: str, api_key: str = ""):
@@ -157,7 +186,7 @@ class HindsightService:
                         if s and len(s.strip())>10:
                             items.append({"text": s[:2000], "relevance": 0.8, "source":"hindsight"})
                     except: pass
-                return items
+                return dedup_memories(items)
             except Exception as e:
                 logger.warning(f"recall failed, mock fallback: {e}")
                 self._mark_unavailable()
@@ -170,7 +199,7 @@ class HindsightService:
             if overlap>0 or not q_words:
                 scored.append({"text": m, "relevance": overlap/max(1,len(q_words)), "source":"mock"})
         scored.sort(key=lambda x: x["relevance"], reverse=True)
-        return scored[:8]
+        return dedup_memories(scored)
 
     def reflect(self, bank_id: str, query: str, context: str = None) -> str:
         self.ensure_bank(bank_id)
