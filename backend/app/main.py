@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text
+from pathlib import Path
 import logging
 from datetime import datetime, timezone
 
@@ -295,3 +298,35 @@ def delete_memory_event(event_id: str, db: Session = Depends(get_db)):
     db.commit()
 
     return {"id": event_id, "deleted": True}
+
+
+# ---------------------------------------------------------------------------
+# Single-URL deploy: serve the built React app from this same service.
+#
+# When frontend/dist exists (produced by `npm run build`), the API and the UI
+# share one origin, so the deployed app needs no CORS configuration and only
+# one public URL. Locally, `frontend/dist` may be absent while the Vite dev
+# server (:5173) serves the UI and proxies /api -> :8001; in that case the app
+# stays API-only and nothing changes.
+# ---------------------------------------------------------------------------
+_FRONTEND_DIST = Path(__file__).resolve().parents[2] / "frontend" / "dist"
+
+
+class _SpaStaticFiles(StaticFiles):
+    """Static assets plus index.html fallback so client-side routes deep-link."""
+
+    async def get_response(self, path, scope):
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404 and self.html:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+if _FRONTEND_DIST.is_dir():
+    app.mount("/", _SpaStaticFiles(directory=str(_FRONTEND_DIST), html=True), name="ui")
+    logger.info(f"Serving frontend build from {_FRONTEND_DIST}")
+else:
+    logger.info("frontend/dist not found — API-only mode (run the Vite dev server for the UI)")
+

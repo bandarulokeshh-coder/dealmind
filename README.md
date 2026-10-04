@@ -98,9 +98,39 @@ cd backend && python test_backend.py
 - Real Hindsight cloud + auth, per-deal banks, reflection caching, webhook ingestion
 
 
+## Deployment (single Live URL)
+
+The deployed app is **one service**: FastAPI serves the API at `/api/*` and the built React
+app at `/*`, so there is one public URL and no CORS configuration to maintain.
+
+**Render (Blueprint — recommended)**
+
+1. Push this repo to GitHub.
+2. Render Dashboard → **New → Blueprint** → select the repo → **Apply**. `render.yaml`
+   installs the Python + Node dependencies, builds the UI, and starts uvicorn.
+3. When prompted, paste the two `sync: false` secrets (they never live in git):
+   - `LLM_API_KEY` — Groq key (`gsk_...`)
+   - `HINDSIGHT_API_KEY` — Hindsight Cloud key (`hsk_...`)
+4. Confirm `GET /api/health` returns `{"database":"connected","hindsight":"connected","llm":"connected"}`.
+   That URL is the Live Demo.
+
+Free-plan notes: the service sleeps after ~15 minutes idle (first request takes ~30-50s), and
+SQLite storage resets on each deploy — re-seed with **Load Demo Customer** on the Dashboard,
+or point `DATABASE_URL` at a Render Postgres URL for persistence.
+
+**Deploying the UI separately (Vercel/Netlify)**
+
+Build with `VITE_API_URL` set to the backend origin (e.g. `https://dealmind.onrender.com`) and
+add that frontend origin to the backend's `CORS_ORIGINS`.
+
+**Tunnel (no deploy — keeps your local DB/memory)**
+
+`./start-live.ps1` builds the UI and serves it from FastAPI on `http://localhost:8001`; expose
+it with `cloudflared tunnel --url http://localhost:8001` for a temporary public URL.
+
 ## Links
 - GitHub: https://github.com/bandarulokeshh-coder/dealmind
-- Live Demo: (deploy pending — see deployment section)
+- Live Demo: (add your Render URL after the Blueprint deploy — see [Deployment](#deployment-single-live-url))
 - Article: article.md
 - Social: SOCIAL_POST.md
 - Video Script: VIDEO_SCRIPT.md

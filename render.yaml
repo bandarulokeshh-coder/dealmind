@@ -1,0 +1,48 @@
+# Render Blueprint — ONE web service serves both the FastAPI API and the built React UI.
+#
+# Why one service: the React build is mounted at "/" by backend/app/main.py, so the
+# API (/api/*) and the UI share an origin. No CORS setup, no second host, one Live URL.
+#
+# How to deploy: Render Dashboard -> New -> Blueprint -> select this GitHub repo -> Apply.
+# Secrets (LLM_API_KEY, HINDSIGHT_API_KEY) are marked `sync: false`, so Render prompts
+# for them on the first sync instead of storing them in the repo.
+services:
+  - type: web
+    name: dealmind
+    runtime: python
+    plan: free
+    region: singapore
+    buildCommand: >-
+      pip install -r backend/requirements.txt &&
+      npm --prefix frontend ci --include=dev &&
+      npm --prefix frontend run build
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_ENV
+        value: production
+      # SQLite keeps the free plan dependency-free; every deploy resets the data,
+      # so re-run "Load Demo Customer" (or POST /api/demo/seed) after a deploy.
+      # Point this at a Render Postgres URL instead for persistent demo data.
+      - key: DATABASE_URL
+        value: sqlite:///./dealmind.db
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: openai/gpt-oss-20b
+      - key: LLM_API_KEY
+        sync: false
+      - key: HINDSIGHT_API_URL
+        value: https://api.hindsight.vectorize.io
+      - key: HINDSIGHT_API_KEY
+        sync: false
+      - key: HINDSIGHT_API_LLM_PROVIDER
+        value: groq
+      - key: HINDSIGHT_API_LLM_MODEL
+        value: openai/gpt-oss-20b
+      # Same-origin serving means no cross-origin calls; add your Vercel/other
+      # frontend URL here only if you host the UI separately.
+      - key: CORS_ORIGINS
+        value: ""
