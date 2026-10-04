@@ -12,3 +12,7 @@ dist/
 .pytest_cache/
 hindsight_data/
 pgdata/
+.vercel
+
+.vercel
+.env*

@@ -1,0 +1,30 @@
+# Keep local-only artifacts out of the Vercel upload.
+# Vercel builds the frontend service itself, and the backend reads config from
+# project environment variables, so neither local env files nor build output is needed.
+
+.venv/
+venv/
+.git/
+.github/
+.vercel/
+
+# secrets and local runtime state
+.env
+.env.local
+.env.*.local
+*.db
+*.log
+
+# Python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Dependencies and build output are rebuilt on Vercel
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# local service data
+hindsight_data/
+pgdata/

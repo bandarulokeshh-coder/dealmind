@@ -3,6 +3,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 from typing import Generator
 import logging
+import os
 
 from .config import settings
 
@@ -33,6 +34,28 @@ def get_engine(database_url: str = None):
             echo=settings.debug_sql if hasattr(settings, 'debug_sql') else False,
         )
 
+def _sqlite_fallback_url() -> str:
+    """Filesystem location for the SQLite fallback database.
+
+    Serverless platforms (Vercel, AWS Lambda) mount the project directory
+    read-only and expose only /tmp as writable, so the fallback must live there
+    when deployed. Anything written to /tmp is per-instance and does not survive
+    a cold start; point DATABASE_URL at a managed Postgres for durable data.
+    """
+    if os.environ.get("VERCEL"):
+        return "sqlite:////tmp/dealmind.db"
+    return "sqlite:///./dealmind.db"
+
+
+def _primary_url() -> str:
+    """settings.database_url, corrected when it cannot work in this environment."""
+    url = settings.database_url
+    # A relative SQLite path would target the read-only deployment directory.
+    if os.environ.get("VERCEL") and url.startswith("sqlite") and not url.startswith("sqlite:////"):
+        return _sqlite_fallback_url()
+    return url
+
+
 def init_db() -> tuple[bool, str]:
     """
     Initialize database with PostgreSQL -> SQLite fallback.
@@ -40,9 +63,11 @@ def init_db() -> tuple[bool, str]:
     """
     global engine, SessionLocal
 
+    primary_url = _primary_url()
+
     try:
         # Try PostgreSQL first
-        engine = get_engine(settings.database_url)
+        engine = get_engine(primary_url)
         Base.metadata.create_all(bind=engine)
 
         # Test connection
@@ -52,7 +77,7 @@ def init_db() -> tuple[bool, str]:
 
         SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-        db_type = "postgresql" if settings.database_url.startswith("postgresql") else "sqlite"
+        db_type = "postgresql" if primary_url.startswith("postgresql") else "sqlite"
         logger.info(f"Database connected: {db_type}")
         return True, db_type
 
@@ -62,7 +87,7 @@ def init_db() -> tuple[bool, str]:
 
         try:
             # Fallback to SQLite
-            fallback_url = "sqlite:///./dealmind.db"
+            fallback_url = _sqlite_fallback_url()
             engine = get_engine(fallback_url)
             Base.metadata.create_all(bind=engine)
 

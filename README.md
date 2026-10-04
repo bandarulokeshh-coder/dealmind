@@ -100,10 +100,26 @@ cd backend && python test_backend.py
 
 ## Deployment (single Live URL)
 
-The deployed app is **one service**: FastAPI serves the API at `/api/*` and the built React
-app at `/*`, so there is one public URL and no CORS configuration to maintain.
+**Live: https://dealmind-ashen.vercel.app** — one domain serves both the API (`/api/*`) and the
+UI (`/*`), so there is no CORS configuration to maintain.
 
-**Render (Blueprint — recommended)**
+**Vercel (what is deployed — one repo, two services)**
+
+`vercel.json` declares two [Services](https://vercel.com/docs/services): a Vite service for
+`frontend/` and a Python service for `backend/` (entrypoint `app.main:app`). Top-level rewrites
+send `/api/*` to the backend and everything else to the frontend; the frontend service's own
+rewrite (`/(.*)` → `/index.html`) gives the SPA its deep links while leaving `/assets/*` intact.
+
+- Redeploy: `vercel --prod` — or just push to `main`, the repo is linked to Vercel.
+- Environment variables (Project → Settings → Environment, `Production`): `LLM_API_KEY`,
+  `HINDSIGHT_API_KEY`, `LLM_BASE_URL`, `LLM_MODEL`, `HINDSIGHT_API_URL`, `DATABASE_URL`, `APP_ENV`.
+- Health check: `GET /api/health` → `{"database":"connected","hindsight":"connected","llm":"connected"}`.
+- Data: `DATABASE_URL=sqlite:////tmp/dealmind.db`. Vercel's filesystem is read-only outside
+  `/tmp`, so demo rows are per-instance and reset on a cold start — click **Load Demo Customer**
+  before recording, or point `DATABASE_URL` at a Neon/Supabase Postgres URL for durable data.
+  Long-term memory lives in Hindsight Cloud, so recall works across instances either way.
+
+**Render (Blueprint — alternative)**
 
 1. Push this repo to GitHub.
 2. Render Dashboard → **New → Blueprint** → select the repo → **Apply**. `render.yaml`
@@ -130,7 +146,7 @@ it with `cloudflared tunnel --url http://localhost:8001` for a temporary public 
 
 ## Links
 - GitHub: https://github.com/bandarulokeshh-coder/dealmind
-- Live Demo: (add your Render URL after the Blueprint deploy — see [Deployment](#deployment-single-live-url))
+- Live Demo: https://dealmind-ashen.vercel.app
 - Article: article.md
 - Social: SOCIAL_POST.md
 - Video Script: VIDEO_SCRIPT.md

@@ -66,8 +66,8 @@ An agent with per-customer Hindsight memory banks that remembers budget, deploym
 Stack: React + FastAPI + Groq gpt-oss-120b + Vectorize Hindsight (retain/recall/reflect) + Postgres
 
 Links:
-- Live Demo: (url)
-- GitHub: (url)
+- Live Demo: https://dealmind-ashen.vercel.app
+- GitHub: https://github.com/bandarulokeshh-coder/dealmind
 - Article: article.md / Hashnode/Medium link
 - Hindsight: https://hindsight.vectorize.io | https://github.com/vectorize-io/hindsight
 
